@@ -4,7 +4,7 @@
 
 1. Open Command Prompt (not PowerShell) and navigate to this project directory:
    ```
-   cd "c:\Users\xuzhi\Desktop\LGD.SGDai, Die Java\hello daibian\online interview\噗噗噗噗💩\agent-simulation"
+   cd "YOUR_DOWNLOAD_REPOSITORY\agent-simulation"
    ```
 
 2. Install dependencies:
