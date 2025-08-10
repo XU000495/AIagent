@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Simulation</title>
+    <!-- React and ReactDOM CDN -->
+    <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+    <!-- Babel CDN for JSX -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Axios CDN -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        .grid-container {
+            display: inline-block;
+            border: 2px solid #333;
+            margin: 20px 0;
+        }
+        .row {
+            display: flex;
+        }
+        .cell {
+            width: 30px;
+            height: 30px;
+            border: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f5f5f5;
+        }
+        .cell.has-agent {
+            background-color: #e6f7ff;
+        }
+        .cell.has-resource {
+            background-color: #fff7e6;
+        }
+        .agent {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background-color: #1890ff;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .resource {
+            font-size: 10px;
+            font-weight: bold;
+            text-align: center;
+        }
+        .resource-wheat {
+            color: #d4b106;
+        }
+        .resource-stone {
+            color: #8c8c8c;
+        }
+        .resource-wood {
+            color: #52c41a;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        .stats-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .agent-stat {
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 5px;
+            width: 200px;
+            background-color: #f9f9f9;
+        }
+        .agent-name {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mt-4 mb-4">Agent Simulation</h1>
+        <div id="root"></div>
+    </div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function WorldGrid() {
+            const [world, setWorld] = useState(null);
+            const [agents, setAgents] = useState([]);
+            const [isRunning, setIsRunning] = useState(false);
+            const [gridSize, setGridSize] = useState({ width: 20, height: 20 });
+            const [agentCount, setAgentCount] = useState(5);
+
+            // Fetch simulation state periodically
+            useEffect(() => {
+                let interval;
+                if (isRunning) {
+                    interval = setInterval(fetchSimulationState, 1000);
+                }
+                return () => clearInterval(interval);
+            }, [isRunning]);
+
+            // Fetch simulation state from backend
+            const fetchSimulationState = async () => {
+                try {
+                    const response = await axios.get('http://localhost:5000/api/simulation/state');
+                    setWorld(response.data.world);
+                    setAgents(response.data.agents);
+                } catch (error) {
+                    console.error('Error fetching simulation state:', error);
+                }
+            };
+
+            // Initialize new simulation
+            const initSimulation = async () => {
+                try {
+                    const response = await axios.post('http://localhost:5000/api/simulation/init', {
+                        name: 'Simulation-1',
+                        width: gridSize.width,
+                        height: gridSize.height,
+                        agentCount
+                    });
+                    setWorld(response.data);
+                    setIsRunning(false);
+                    // Fetch initial agents
+                    fetchSimulationState();
+                } catch (error) {
+                    console.error('Error initializing simulation:', error);
+                }
+            };
+
+            // Start simulation
+            const startSimulation = async () => {
+                try {
+                    await axios.post('http://localhost:5000/api/simulation/start');
+                    setIsRunning(true);
+                } catch (error) {
+                    console.error('Error starting simulation:', error);
+                }
+            };
+
+            // Stop simulation
+            const stopSimulation = async () => {
+                try {
+                    await axios.post('http://localhost:5000/api/simulation/stop');
+                    setIsRunning(false);
+                } catch (error) {
+                    console.error('Error stopping simulation:', error);
+                }
+            };
+
+            // Render grid cell
+            const renderCell = (x, y) => {
+                if (!world) return <div className="cell"></div>;
+
+                // Check if there's an agent in this cell
+                const agentInCell = agents.find(agent => agent.x === x && agent.y === y && agent.isAlive);
+
+                // Check if there's a resource in this cell
+                const resourceInCell = world.resources.find(resource => 
+                    resource.x === x && resource.y === y && !resource.isHarvested
+                );
+
+                let cellContent = null;
+                let cellClass = 'cell';
+
+                if (agentInCell) {
+                    cellContent = (
+                        <div className="agent">
+                            <span>{agentInCell.name.charAt(6)}</span>
+                        </div>
+                    );
+                    cellClass += ' has-agent';
+                } else if (resourceInCell) {
+                    cellContent = (
+                        <div className={`resource resource-${resourceInCell.type.toLowerCase()}`}>
+                            {resourceInCell.type.charAt(0)}{resourceInCell.amount}
+                        </div>
+                    );
+                    cellClass += ' has-resource';
+                }
+
+                return (
+                    <div key={`${x}-${y}`} className={cellClass}>
+                        {cellContent}
+                    </div>
+                );
+            };
+
+            // Generate grid rows
+            const generateGrid = () => {
+                if (!world) return null;
+
+                const rows = [];
+                for (let y = 0; y < world.height; y++) {
+                    const cells = [];
+                    for (let x = 0; x < world.width; x++) {
+                        cells.push(renderCell(x, y));
+                    }
+                    rows.push(
+                        <div key={y} className="row">
+                            {cells}
+                        </div>
+                    );
+                }
+                return rows;
+            };
+
+            return (
+                <div>
+                    <div className="controls">
+                        <div className="form-group mb-2">
+                            <label>Grid Width:</label>
+                            <input
+                                type="number"
+                                value={gridSize.width}
+                                onChange={(e) => setGridSize({...gridSize, width: parseInt(e.target.value)})}
+                                min="5"
+                                max="50"
+                            />
+                        </div>
+                        <div className="form-group mb-2">
+                            <label>Grid Height:</label>
+                            <input
+                                type="number"
+                                value={gridSize.height}
+                                onChange={(e) => setGridSize({...gridSize, height: parseInt(e.target.value)})}
+                                min="5"
+                                max="50"
+                            />
+                        </div>
+                        <div className="form-group mb-2">
+                            <label>Agent Count:</label>
+                            <input
+                                type="number"
+                                value={agentCount}
+                                onChange={(e) => setAgentCount(parseInt(e.target.value))}
+                                min="1"
+                                max="20"
+                            />
+                        </div>
+                        <button onClick={initSimulation} className="btn btn-primary mr-2">
+                            Initialize
+                        </button>
+                        <button onClick={startSimulation} className="btn btn-success mr-2" disabled={!world || isRunning}>
+                            Start
+                        </button>
+                        <button onClick={stopSimulation} className="btn btn-danger" disabled={!isRunning}>
+                            Stop
+                        </button>
+                    </div>
+
+                    {world && (
+                        <div className="simulation-info mb-4">
+                            <h5>Turn: {world.turn} | Status: {isRunning ? 'Running' : 'Paused'}</h5>
+                        </div>
+                    )}
+
+                    <div className="grid-container">
+                        {generateGrid()}
+                    </div>
+
+                    {world && (
+                        <div className="agent-stats mt-4">
+                            <h5>Agent Statistics</h5>
+                            <div className="stats-container">
+                                {agents
+                                    .filter(agent => agent.isAlive)
+                                    .map((agent) => (
+                                        <div key={agent.name} className="agent-stat">
+                                            <div className="agent-name">{agent.name}</div>
+                                            <div className="agent-inventory">
+                                                Inventory: {Object.entries(agent.inventory).map(([resource, amount]) => (
+                                                    <span key={resource} className="resource-count">
+                                                        {resource}: {amount} 
+                                                    </span>
+                                                ))}
+                                            </div>
+                                            <div className="agent-status">
+                                                Lifespan: {agent.currentLifespan}/{agent.maxLifespan}
+                                            </div>
+                                            <div className="agent-action">
+                                                Last Action: {agent.lastAction}
+                                            </div>
+                                        </div>
+                                    ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        ReactDOM.render(<WorldGrid />, document.getElementById('root'));
+    </script>
+</body>
+</html>
